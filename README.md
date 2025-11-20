@@ -8,6 +8,15 @@
 6. Buzzer 5V            -- 1 pcs
 7. RELAY 5V             -- 1 pcs
 
+</br>
+
+**Konfigurasi GPIO ESP32** (sementara): </br>
+![gpio](LAMPIRAN/gpio_esp32_kwhmeter.png)
+
+</br>
+
+**Rangakaian Sistem** (sementara): </br>
+![rangkaian](nama_folder/nama_gambar.png)
 
 
 ## **1. kwh_metering**
