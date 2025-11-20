@@ -16,7 +16,7 @@
 </br>
 
 **Rangakaian Sistem** (sementara): </br>
-![rangkaian](nama_folder/nama_gambar.png)
+![rangkaian](LAMPIRAN/RANGKAIAN_1.jpg)
 
 
 ## **1. kwh_metering**
