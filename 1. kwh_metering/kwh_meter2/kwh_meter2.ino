@@ -5,15 +5,23 @@
 #include <WiFiUdp.h>
 
 // ----- PIN DEFINITION -----
+/*
+  SD Card Interface code for ESP32
+  SPI Pins of ESP32 SD card as follows:
+  CS    = 5;
+  MOSI  = 23;
+  MISO  = 19;
+  SCK   = 18; 
+*/
 #define RX_PIN 16      //ESP32 RX
 #define TX_PIN 17      //ESP32 TX
-#define PB_LEFT 18     //left button
-#define PB_RIGHT 19    //right button
-// #define RELAY_SIGNAL 23
-// #define RED_LED 25
-// #define YELLOW_LED 26
-// #define GREEN_LED 27
-// #define BUZZER 33
+#define PB_LEFT 14     //left button
+#define PB_RIGHT 12    //right button
+// #define RELAY_SIGNAL 32
+#define RED_LED 25
+#define YELLOW_LED 26
+#define GREEN_LED 27
+#define BUZZER_PIN 33
 
 PZEM004Tv30 pzem(Serial2, RX_PIN, TX_PIN);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
@@ -28,7 +36,14 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", 7 * 3600, 60000);  //offset = GMT+7
 
 String formattedDate, dateStamp, timeStamp, dd, mm, yyyy;  //variabel waktu
 float voltage, current, power, energy, frequency, pf;      //variabel kWh
+float sumVoltage = 0, sumCurrent = 0, sumPower = 0, sumEnergy = 0, sumFreq = 0, sumPF = 0;
+unsigned long countSamples = 0, lastFiveMin = 0;
 int pageCtr = 1, pageMax = 3;                              //navigation page
+bool alarmActive = false, alarmDone = false;               //alarm settings
+
+// ----- Treshold parameter -----
+float V_HH = 242, V_H = 231, V_LL = 198, V_L = 200;
+float I_HH = 8, I_H = 6.8;
 
 // ----- TIMER NON BLOCKING -----
 unsigned long lastSensorRead = 0;
@@ -39,22 +54,21 @@ volatile bool rightPressed = false, leftPressed = false;
 unsigned long lastIRight = 0, lastILeft = 0;
 const unsigned long debounceI = 150; // ms debounce
 
-// ----- ISR HANDLERS -----
-void IRAM_ATTR onRightPress() {
-  unsigned long now = millis();
 
-  if (now - lastIRight > debounceI) {
+// ==============================================================
+// ISR HANDLERS BUTTON
+// ==============================================================
+void IRAM_ATTR onRightPress() {
+  if (millis() - lastIRight > debounceI) {
     rightPressed = true;
-    lastIRight = now;
+    lastIRight = millis();
   }
 }
 
 void IRAM_ATTR onLeftPress() {
-  unsigned long now = millis();
-
-  if (now - lastILeft > debounceI) {
+  if (millis() - lastILeft > debounceI) {
     leftPressed = true;
-    lastILeft = now;
+    lastILeft = millis();
   }
 }
 
@@ -79,9 +93,6 @@ bool connectWiFi() {
     attempts++;
   }
 
-  //delay(2000);
-  //lcd.clear();
-
   return WiFi.status() == WL_CONNECTED;
 }
 
@@ -92,7 +103,7 @@ bool connectWiFi() {
 String getDateTime() {
   timeClient.update();
   formattedDate = timeClient.getFormattedDate();
-  Serial.println(formattedDate);
+  Serial.println("\n" + formattedDate);
 
   int splitT = formattedDate.indexOf("T");
   
@@ -108,8 +119,7 @@ String getDateTime() {
 
 
 // ==============================================================
-// CLEAR CONTENT AREA ONLY
-// (Baris 1, 2, 3 saja)
+// CLEAR CONTENT AREA ONLY (Baris 1, 2, 3 saja)
 // ==============================================================
 void clearContentArea() {
   lcd.setCursor(0, 1); lcd.print("                    ");
@@ -150,6 +160,50 @@ void drawPage() {
 
 
 // ==============================================================
+// FUNGSI LOGIKA ALARM
+// ==============================================================
+void alarmTrigger(float v, float i) {
+  // ----- Reset alarm jika kondisi kembali normal -----
+  if (v >= V_L && v <= V_H && i <= I_H) {
+    alarmDone = false;
+  }
+
+  // ----- MERAH: kondisi ekstrem -----
+  if (v >= V_HH || v <= V_LL || i >= I_HH) {
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+
+    if (!alarmActive) {
+      alarmActive = true;
+      alarmDone = false;
+      digitalWrite(BUZZER_PIN, HIGH);
+    }
+    return;
+  }
+
+  // ----- KUNING: kondisi warning -----
+  if ((v >= V_H && v < V_HH) || (v > V_LL && v <= V_L) || (i >= I_H && i < I_HH)) {
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(YELLOW_LED, HIGH);
+    digitalWrite(GREEN_LED, LOW);
+
+    alarmActive = false;
+    digitalWrite(BUZZER_PIN, LOW);    // tidak bunyi
+    return;
+  }
+
+  // ----- KONDISI NORMAL -----
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(GREEN_LED, HIGH);
+
+  alarmActive = false;
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+
+// ==============================================================
 // SETUP
 // ==============================================================
 void setup() {
@@ -157,9 +211,17 @@ void setup() {
 
   pinMode(PB_LEFT, INPUT_PULLDOWN);
   pinMode(PB_RIGHT, INPUT_PULLDOWN);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
 
   attachInterrupt(digitalPinToInterrupt(PB_RIGHT), onRightPress, RISING);
   attachInterrupt(digitalPinToInterrupt(PB_LEFT), onLeftPress, RISING);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(GREEN_LED, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
   
   // ----- INITIALIZE LCD -----
   lcd.init();
@@ -185,8 +247,10 @@ void setup() {
   delay(2000);
   lcd.clear();
 
+  lastFiveMin = millis();
+
   // ----- Reset energi -----
-  pzem.resetEnergy();
+  //pzem.resetEnergy();
 }
 
 
@@ -198,12 +262,21 @@ void loop() {
 
   // ----- TANGGAL DAN WAKTU -----
   if (nowTime - lastTimeUpdate >= 1000) {
-    lastTimeUpdate = nowTime;
+    lastTimeUpdate += 1000;
+    //lastTimeUpdate = nowTime;
     lcd.setCursor(0, 0);
     lcd.print(getDateTime());
   }
 
   // ----- KONFIGURASI TOMBOL NAVIGASI -----
+  // Handle tombol untuk matikan alarm
+  if ((rightPressed || leftPressed) && alarmActive) {
+      alarmDone = true;
+      alarmActive = false;
+      digitalWrite(BUZZER_PIN, LOW);
+      digitalWrite(RED_LED, LOW);
+  }
+
   // tombol kanan
   if (rightPressed) {
     rightPressed = false;
@@ -232,7 +305,7 @@ void loop() {
   // Serial.println(pzem.readAddress(), HEX);
 
   if (nowTime - lastSensorRead >= 1000) {
-    lastSensorRead = nowTime;
+    lastSensorRead += 1000;
 
     voltage   = pzem.voltage();
     current   = pzem.current();
@@ -248,6 +321,57 @@ void loop() {
     if (isnan(frequency)) frequency = 0;
     if (isnan(pf))        pf        = 0;
 
+    // ----- Print the values to the Serial terminal -----
+    Serial.print("Voltage  : ");    Serial.print(voltage);      Serial.println("V");
+    Serial.print("Current  : ");    Serial.print(current);      Serial.println("A");
+    Serial.print("Power    : ");    Serial.print(power);        Serial.println("W");
+    Serial.print("Energy   : ");    Serial.print(energy);       Serial.println("kWh");
+    Serial.print("Frequency: ");    Serial.print(frequency);    Serial.println("Hz");
+    Serial.print("PF       : ");    Serial.println(pf);
+
+    // ----- Print the values to the LCD -----
     drawPage();
+
+    // ----- AKUMULASI DATA LOGGING -----
+    sumVoltage += voltage;
+    sumCurrent += current;
+    sumPower += power;
+    sumEnergy += energy;
+    sumFreq += frequency;
+    sumPF += pf;
+
+    countSamples++;
+
+    if (nowTime - lastFiveMin >= 300000) {
+      lastFiveMin += 300000;
+
+      //Hitung rata-rata
+      float avgVoltage = sumVoltage/countSamples;
+      float avgCurrent = sumCurrent/countSamples;
+      float avgPower = sumPower/countSamples;
+      float avgFreq = sumFreq/countSamples;
+      float avgEnergy = sumEnergy/countSamples;
+      float avgPF = sumPF/countSamples;
+
+      Serial.println("\n5 min avg data: =================");
+      Serial.println("Avg Voltage   : " + String(avgVoltage));
+      Serial.println("Avg Current   : " + String(avgCurrent));
+      Serial.println("Avg Power     : " + String(avgPower));
+      Serial.println("Avg Energy    : " + String(avgEnergy));
+      Serial.println("Avg Frequency : " + String(avgFreq));
+      Serial.println("Avg PF        : " + String(avgPF));
+      Serial.println("=================================\n");
+
+      // Reset akumulasi
+      sumVoltage   = 0;
+      sumCurrent   = 0;
+      sumPower     = 0;
+      sumEnergy    = 0;
+      sumFreq      = 0;
+      sumPF        = 0;
+      countSamples = 0;
+    }
+
+    alarmTrigger(voltage, current);
   }
 }
