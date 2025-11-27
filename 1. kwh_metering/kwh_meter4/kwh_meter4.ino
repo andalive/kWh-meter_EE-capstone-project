@@ -1,6 +1,6 @@
 /*
   KWH METER
-  VER. 1.1 -> adapted to FreeRTOS tasks & queues
+  VER. 1.3 -> adapted to FreeRTOS tasks & queues
 */
 
 #include <PZEM004Tv30.h>
@@ -51,7 +51,7 @@ unsigned long bootMillis = 0;                              //variabel runtime
 float V_HH = 242, V_H = 231, V_LL = 198, V_L = 200;
 float I_HH = 8, I_H = 6.8;
 
-// ----- INTERUPT FLAGS (kept for compatibility, but not used like before) -----
+// ----- INTERUPT FLAGS -----
 volatile bool rightPressed = false, leftPressed = false;
 unsigned long lastIRight = 0, lastILeft = 0;
 const unsigned long debounceI = 150; // ms debounce
@@ -86,7 +86,7 @@ void IRAM_ATTR onLeftPress() {
 
 
 // ==============================================================
-// FUNGSI KONEKSI WIFI (tidak diubah)
+// FUNGSI KONEKSI WIFI
 // ==============================================================
 bool connectWiFi() {
   Serial.print("\nConnection to: ");
@@ -113,7 +113,7 @@ bool connectWiFi() {
 
 
 // ============================================================== 
-// FUNGSI WAKTU-TANGGAL (TIDAK DIUBAH)
+// FUNGSI WAKTU-TANGGAL
 // ==============================================================
 String getDateTime() {
   timeClient.update();
@@ -270,17 +270,15 @@ void TaskTimeUpdate(void *pvParameters) {
 
 // ==============================================================
 // FreeRTOS Task: Read PZEM data every 1 second, serial print, accumulate & compute 5-min averages
-// This task will also call drawPage() and alarmTrigger() as in original
 // ==============================================================
 void TaskSensorRead(void *pvParameters) {
   const TickType_t xDelay = pdMS_TO_TICKS(1000);
-  // local copy for timing of 5-min accumulate similar to original
+  // local copy for timing of 5-min accumulate
   unsigned long localLastFiveMin = millis();
   unsigned long localCountSamples = 0;
   float localSumV = 0, localSumI = 0, localSumP = 0, localSumE = 0, localSumF = 0, localSumPF = 0;
 
   for (;;) {
-    // Read the sensor values
     float rV = pzem.voltage();
     float rI = pzem.current();
     float rP = pzem.power();
@@ -295,7 +293,7 @@ void TaskSensorRead(void *pvParameters) {
     if (isnan(rF))   rF   = 0;
     if (isnan(rPF))  rPF  = 0;
 
-    // Update globals (so drawPage uses them)
+    // Update globals
     voltage = rV;
     current = rI;
     power = rP;
@@ -353,7 +351,7 @@ void TaskSensorRead(void *pvParameters) {
       Serial.println("Avg PF        : " + String(avgPF));
       Serial.println("=================================\n");
 
-      // Reset akumulasi lokal (global sums are also reset here, as original)
+      // Reset akumulasi lokal (global sums are also reset here)
       localSumV = localSumI = localSumP = localSumE = localSumF = localSumPF = 0;
       localCountSamples = 0;
 
@@ -366,7 +364,7 @@ void TaskSensorRead(void *pvParameters) {
       countSamples = 0;
     }
 
-    // Call alarm logic (same as original)
+    // Call alarm logic
     alarmTrigger(voltage, current);
 
     vTaskDelay(xDelay);
@@ -382,10 +380,6 @@ void TaskButtonHandler(void *pvParameters) {
   char ev;
   for (;;) {
     if (xQueueReceive(buttonQueue, &ev, portMAX_DELAY) == pdTRUE) {
-      // When any button pressed, original code set alarmMuted true and digitalWrite(BUZZER_PIN, LOW)
-      // alarmMuted = true;
-      // digitalWrite(BUZZER_PIN, LOW);
-
       if(lastCritical) {
         alarmMuted = true;
         digitalWrite(BUZZER_PIN, LOW);
@@ -440,7 +434,7 @@ void setup() {
   lcd.init();
   lcd.backlight();
 
-  // Print header (same as original)
+  // Print INTRO
   if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(500))) {
     lcd.setCursor(0, 0);
     lcd.print("POWER MONITOR");
