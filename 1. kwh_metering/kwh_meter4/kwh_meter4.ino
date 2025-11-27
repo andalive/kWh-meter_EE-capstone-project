@@ -1,6 +1,6 @@
 /*
   KWH METER
-  VER. 1.0 -> adapted to FreeRTOS tasks & queues
+  VER. 1.1 -> adapted to FreeRTOS tasks & queues
 */
 
 #include <PZEM004Tv30.h>
@@ -45,6 +45,7 @@ float sumVoltage = 0, sumCurrent = 0, sumPower = 0, sumEnergy = 0, sumFreq = 0, 
 unsigned long countSamples = 0, lastFiveMin = 0;
 int pageCtr = 1, pageMax = 3;                              //navigation page
 bool alarmMuted = false, lastCritical = false;             //alarm settings
+unsigned long bootMillis = 0;                              //variabel runtime
 
 // ----- Treshold parameter -----
 float V_HH = 242, V_H = 231, V_LL = 198, V_L = 200;
@@ -97,8 +98,7 @@ bool connectWiFi() {
 
   // Protect lcd with mutex
   if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(200))) {
-    lcd.setCursor(0, 2);
-    lcd.print("Connecting WiFi ...");
+    lcd.setCursor(0, 1); lcd.print("Connecting WiFi ...");
     xSemaphoreGive(lcdMutex);
   }
 
@@ -134,59 +134,25 @@ String getDateTime() {
 
 
 // ==============================================================
-// CLEAR CONTENT AREA ONLY (Baris 1, 2, 3 saja) - use lcdMutex
+// FUNGSI LOGIKA + STATUS ALARM
 // ==============================================================
-void clearContentArea() {
-  if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(200))) {
-    lcd.setCursor(0, 1); lcd.print("                    ");
-    lcd.setCursor(0, 2); lcd.print("                    ");
-    lcd.setCursor(0, 3); lcd.print("                    ");
-    xSemaphoreGive(lcdMutex);
+String getAlarmState(float v, float i) {
+  bool isCritical = (v >= V_HH || v <= V_LL || i >= I_HH);
+  bool isWarning  = ((v >= V_H && v < V_HH) || 
+                     (v > V_LL && v <= V_L) ||
+                     (i >= I_H && i < I_HH));
+  
+  if (isCritical) {
+    return "CRITICAL";
   }
+
+  if (isWarning) {
+    return "WARNING";
+  }
+
+  return "NORMAL";
 }
 
-
-// ============================================================== 
-// FUNGSI NAVIGASI HALAMAN (drawPage)
-// ==============================================================
-void drawPage() {
-  // We'll update only content area as original
-  if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(200))) {
-    // clear content (only lines 1..3)
-    lcd.setCursor(0, 1); lcd.print("                    ");
-    lcd.setCursor(0, 2); lcd.print("                    ");
-    lcd.setCursor(0, 3); lcd.print("                    ");
-
-    switch(pageCtr) {
-      case 1:
-        lcd.setCursor(0, 2);
-        lcd.print("V:" + String(voltage, 1) + "V");
-        lcd.setCursor(10,2);
-        lcd.print("I:" + String(current, 1) + "A");
-        lcd.setCursor(0, 3);
-        lcd.print("P:" + String(power, 1) + "W");
-        lcd.setCursor(10,3);
-        lcd.print("E:" + String(energy, 1) + "kWh");
-        break;
-      case 2:
-        lcd.setCursor(0, 2);
-        lcd.print("F:" + String(frequency, 1) + "Hz");
-        lcd.setCursor(10,2);
-        lcd.print("PF:" + String(pf, 2));
-        break;
-      case 3:
-        lcd.setCursor(0, 2);
-        lcd.print("END");
-        break;
-    }
-    xSemaphoreGive(lcdMutex);
-  }
-}
-
-
-// ==============================================================
-// FUNGSI LOGIKA ALARM
-// ==============================================================
 void alarmTrigger(float v, float i) {
   bool isCritical = (v >= V_HH || v <= V_LL || i >= I_HH);
   bool isWarning  = ((v >= V_H && v < V_HH) || 
@@ -233,6 +199,50 @@ void alarmTrigger(float v, float i) {
     digitalWrite(GREEN_LED, HIGH);
     digitalWrite(RELAY_PIN, HIGH);
     digitalWrite(BUZZER_PIN, LOW);
+  }
+}
+
+
+// ============================================================== 
+// FUNGSI NAVIGASI HALAMAN (drawPage)
+// ==============================================================
+void drawPage(float v, float i) {
+  // We'll update only content area as original
+  if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(200))) {
+    // clear content (only lines 1..3)
+    lcd.setCursor(0, 1); lcd.print("                    ");
+    lcd.setCursor(0, 2); lcd.print("                    ");
+    lcd.setCursor(0, 3); lcd.print("                    ");
+
+    String alarmState = getAlarmState(v, i);
+
+    switch(pageCtr) {
+      case 1:
+        lcd.setCursor(0,1);  lcd.print("V:" + String(voltage, 1) + "V");
+        lcd.setCursor(10,1); lcd.print("I:" + String(current, 1) + "A");
+        lcd.setCursor(0, 2); lcd.print("P:" + String(power, 1) + "W");
+        lcd.setCursor(10,2); lcd.print("E:" + String(energy, 1) + "kWh");
+        lcd.setCursor(0,3);  lcd.print("[STATUS: " + alarmState + "]");
+        break;
+      case 2:
+        lcd.setCursor(0,1);  lcd.print("F:" + String(frequency, 1) + "Hz");
+        lcd.setCursor(10,1); lcd.print("PF:" + String(pf, 2));
+        lcd.setCursor(0,3);  lcd.print("[STATUS: " + alarmState + "]");
+        break;
+      case 3: {
+        unsigned long rt = (millis() - bootMillis) / 1000;
+        int h = rt/3600;
+        int m = (rt % 3600)/60;
+        int s = rt % 60;
+
+        lcd.setCursor(0,1); lcd.print("===SYSTEM  STATUS===");
+        lcd.setCursor(0,2); lcd.print("RUN  : " + String(h) + "h " + String(m) + "m " + String(s) + "s");
+        lcd.setCursor(0,3); lcd.print("ALARM: " + alarmState);
+        break;
+      }
+    }
+
+    xSemaphoreGive(lcdMutex);
   }
 }
 
@@ -302,7 +312,7 @@ void TaskSensorRead(void *pvParameters) {
     Serial.print("PF       : ");    Serial.println(pf);
 
     // ----- Print the values to the LCD -----
-    drawPage();
+    drawPage(voltage, current);
 
     // ----- AKUMULASI DATA LOGGING -----
     sumVoltage += voltage;
@@ -386,13 +396,13 @@ void TaskButtonHandler(void *pvParameters) {
         if (pageCtr < pageMax) {
           pageCtr++;
         }
-        drawPage();
+        drawPage(voltage, current);
       } else if (ev == 'L') {
         // tombol kiri
         if (pageCtr > 1) {
           pageCtr--;
         }
-        drawPage();
+        drawPage(voltage, current);
       }
     }
   }
@@ -444,15 +454,15 @@ void setup() {
 
     Serial.println("[CONNECTED]\n");
     if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(200))) {
-      lcd.setCursor(0, 3);
-      lcd.print("[CONNECTED]");
+      lcd.setCursor(0, 2); lcd.print("[CONNECTED]");
+      lcd.setCursor(0, 3); lcd.print("IP: " + WiFi.localIP().toString());
       xSemaphoreGive(lcdMutex);
     }
   } else {
     Serial.println("[FAILED]\n");
     if (xSemaphoreTake(lcdMutex, pdMS_TO_TICKS(200))) {
-      lcd.setCursor(0, 3);
-      lcd.print("[FAILED]");
+      lcd.setCursor(0, 2); lcd.print("[FAILED]");
+      lcd.setCursor(0, 3); lcd.print("IP: None");
       xSemaphoreGive(lcdMutex);
     }
   }
@@ -465,7 +475,7 @@ void setup() {
 
   lastFiveMin = millis();
 
-  // ----- Reset energi ----- (commented, as original)
+  // ----- Reset energi -----
   //pzem.resetEnergy();
 
   // Create FreeRTOS tasks
