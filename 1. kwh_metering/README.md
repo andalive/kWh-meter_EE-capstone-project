@@ -91,15 +91,6 @@ Baris pertama selalu menampilkan waktu dan tanggal. Gunakan tombol kiri/kanan un
 - **Queue** (`buttonQueue`): mengirim event tombol (`'R'` / `'L'`) dari ISR ke task
 - **Mutex** (`lcdMutex`): melindungi akses ke LCD antar task
 
-## Cara Penggunaan
-
-1. Install semua library yang dibutuhkan
-2. Atur SSID dan password WiFi
-3. Pilih board ESP32 di Arduino IDE, lalu upload kode
-4. Buka Serial Monitor dengan baud rate **115200** untuk melihat data pengukuran
-
----
-
 ### **Donwload-Install NTP Client Library**
 
 1. Download folder .zip NTP Client Library (https://github.com/taranais/NTPClient/archive/master.zip)
