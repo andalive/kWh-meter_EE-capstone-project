@@ -58,8 +58,6 @@ Tahap ini memperlihatkan susunan komponen yang lebih berkembang dibandingkan int
 
 ## Ruang Lingkup Kontribusi
 
-Dokumentasi ini berfokus pada kontribusi dalam perancangan dan pengembangan embedded system, berupa:
-
 - Perancangan awal dan integrasi rangkaian hardware.
 - Pemilihan serta pengujian komponen elektronik.
 - Pengembangan kode mikrokontroler untuk kebutuhan integrasi perangkat.
