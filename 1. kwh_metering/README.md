@@ -91,6 +91,8 @@ Baris pertama selalu menampilkan waktu dan tanggal. Gunakan tombol kiri/kanan un
 - **Queue** (`buttonQueue`): mengirim event tombol (`'R'` / `'L'`) dari ISR ke task
 - **Mutex** (`lcdMutex`): melindungi akses ke LCD antar task
 
+---
+
 ### **Donwload-Install NTP Client Library**
 
 1. Download folder .zip NTP Client Library (https://github.com/taranais/NTPClient/archive/master.zip)
