@@ -1,6 +1,8 @@
 # KWH Meter (ESP32 + PZEM-004T v3.0)
 
-## Fitur <WIP>
+Source code: [kwh_meter4](kwh_meter4)
+
+## Fitur (draft)
 
 - Pengukuran tegangan, arus, daya, energi (kWh), frekuensi, dan power factor (PF)
 - Tampilan LCD 3 halaman yang dapat dinavigasi dengan tombol kiri/kanan
@@ -10,7 +12,7 @@
 - Tombol untuk mematikan (mute) buzzer saat kondisi kritis
 - Rata-rata data setiap 5 menit ditampilkan di Serial Monitor
 
-## Perangkat Keras <WIP>
+## Perangkat Keras (draft)
 
 - ESP32
 - Sensor PZEM-004T v3.0
@@ -18,7 +20,7 @@
 - 2 push button (kiri & kanan)
 - Relay, buzzer, dan 3 LED (merah, kuning, hijau)
 
-### Konfigurasi Pin
+### Konfigurasi Pin (draft)
 
 | Komponen          | Pin ESP32 |
 |-------------------|-----------|
@@ -72,7 +74,7 @@ const char* password = "PASSWORD_WIFI";
 
 Mute buzzer akan direset otomatis ketika kondisi kritis terjadi kembali.
 
-## Tampilan LCD
+## Tampilan LCD (draft)
 
 Baris pertama selalu menampilkan waktu dan tanggal. Gunakan tombol kiri/kanan untuk berpindah halaman.
 
